@@ -17,6 +17,12 @@ import sys
 import getopt
 from re import match
 
+try:
+    import pexpect
+except:
+    print "eix requires pexpect Python module. Install it from your default repository."
+    sys.exit(1)
+
 PRINT_VERSION = "0.1-r5"
 
 
@@ -178,9 +184,21 @@ def mysearch(pmanager, pname, inst, printinfo):
     """
     resul = {"Section" : "", "Homepage" : "", "Description": "",
              "Version": "", "Deps": "", "Provides": "", "Build": ""}
-    cache = os.popen("%s -Si %s" % (pmanager,pname), "r")
+    if pmanager == "yaourt":
+        # Do the magic baby
+        child = pexpect.spawn("%s -Si %s" % (pmanager, pname))
+        child.expect(".*")
+        if child.after.startswith("Repository"):
+            cache = child.after.splitlines() #[:-1]
+        else:
+            child.sendline('n')
+            child.expect(".*")
+            cache = child.after.splitlines() #[2:-2]
+    else:
+        out = os.popen("%s -Si %s" % (pmanager,pname), "r")
+        cache = out.readlines()
     try:
-        for line in cache.readlines():
+        for line in cache:
             line = line.strip()
             if match("^Repository", line):
                 resul["Section"] = line.split(": ")[1].strip()
@@ -196,9 +214,10 @@ def mysearch(pmanager, pname, inst, printinfo):
             if match("^Version", line):
                 resul["Version"] =line.split(": ")[1].strip()
             if match("^url", line.lower()):
-                resul["Homepage"] =line.split(": ")[1].strip()
+                resul["Homepage"] = line.split(": ")[1].strip()
         myprint(pmanager, pname, resul, inst, printinfo)
     except:
+        print "se pudrio todo"
         sys.exit(1)
 
 ######################
