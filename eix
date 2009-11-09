@@ -16,6 +16,7 @@ import os
 import sys
 import getopt
 from re import match
+import urllib2
 
 try:
     import pexpect
@@ -169,56 +170,74 @@ def search(pmanager, flag, puniq, inst, package):
             version = line.strip().split()[1]
             if puniq == 1:
                 if name == package:
-                    mysearch(pmanager, name, inst, flag)
+                    mysearch(pmanager, name, section, inst, flag)
                     break
             else:
-                mysearch(pmanager, name, inst, flag)
+                mysearch(pmanager, name, section, inst, flag)
 
 
 ####################
 # APT SHOW search  #
 ####################
-def mysearch(pmanager, pname, inst, printinfo):
+def mysearch(pmanager, pname, section, inst, printinfo):
     """
     EIX specified search through apt-cache show package.
     """
     resul = {"Section" : "", "Homepage" : "", "Description": "",
              "Version": "", "Deps": "", "Provides": "", "Build": ""}
-    if pmanager == "yaourt":
-        # Do the magic baby
-        child = pexpect.spawn("%s -Si %s" % (pmanager, pname))
-        child.expect(".*")
-        if child.after.startswith("Repository"):
-            cache = child.after.splitlines() #[:-1]
-        else:
-            child.sendline('n')
-            child.expect(".*")
-            cache = child.after.splitlines() #[2:-2]
+    if pmanager == "yaourt" and section == "aur":
+        cache = urllib2.urlopen("http://aur.archlinux.org/packages/%s/%s/PKGBUILD" % (pname,pname)).readlines()
+        try:
+            resul["Section"] = "AUR Unsupported"
+            pkver = ''
+            pkrel = ''
+            for line in cache:
+                line = line.strip()
+                if match("^pkgdesc", line):
+                   resul["Description"] = line.split("=")[1].strip().replace('"','').replace("'","")
+                if printinfo == 1:
+                    if match("^depends", line):
+                        resul["Deps"] = line.split("=(")[1].strip().replace(')','').replace("'","")
+                    if match("^provides", line):
+                        resul["Provides"] = line.split("=(")[1].strip().replace(')','').replace("'","")
+                    if match("^Build", line):
+                        resul["Build"] = line.split(": ")[1].strip()
+                if match("^pkgver", line):
+                   pkver = line.split("=")[1]
+                if match("^pkgrel", line):
+                   pkrel = line.split("=")[1]
+                if match("^url", line.lower()):
+                   resul["Homepage"] = line.split("=")[1].strip().replace('"','').replace("'","")
+            resul['Version'] = "%s-%s" % (pkver, pkrel)
+            myprint(pmanager, pname, resul, inst, printinfo) 
+        except Exception, e:
+            print "se pudrio todo"
+            sys.exit(1)
     else:
         out = os.popen("%s -Si %s" % (pmanager,pname), "r")
         cache = out.readlines()
-    try:
-        for line in cache:
-            line = line.strip()
-            if match("^Repository", line):
-                resul["Section"] = line.split(": ")[1].strip()
-            if match("^Description", line):
-                resul["Description"] = line.split(": ")[1].strip()
-            if printinfo == 1:
-                if match("^Depends", line):
-                    resul["Deps"] = line.split(": ")[1].strip()
-                if match("^Provides", line):
-                    resul["Provides"] = line.split(": ")[1].strip()
-                if match("^Build", line):
-                    resul["Build"] = line.split(": ")[1].strip()
-            if match("^Version", line):
-                resul["Version"] =line.split(": ")[1].strip()
-            if match("^url", line.lower()):
-                resul["Homepage"] = line.split(": ")[1].strip()
-        myprint(pmanager, pname, resul, inst, printinfo)
-    except:
-        print "se pudrio todo"
-        sys.exit(1)
+        try:
+            for line in cache:
+                line = line.strip()
+                if match("^Repository", line):
+                    resul["Section"] = line.split(": ")[1].strip()
+                if match("^Description", line):
+                    resul["Description"] = line.split(": ")[1].strip()
+                if printinfo == 1:
+                    if match("^Depends", line):
+                        resul["Deps"] = line.split(": ")[1].strip()
+                    if match("^Provides", line):
+                        resul["Provides"] = line.split(": ")[1].strip()
+                    if match("^Build", line):
+                        resul["Build"] = line.split(": ")[1].strip()
+                if match("^Version", line):
+                    resul["Version"] =line.split(": ")[1].strip()
+                if match("^url", line.lower()):
+                    resul["Homepage"] = line.split(": ")[1].strip()
+            myprint(pmanager, pname, resul, inst, printinfo)
+        except:
+            print "se pudrio todo"
+            sys.exit(1)
 
 ######################
 # EIX personal print #
